@@ -38,15 +38,17 @@ wss.on('connection', (ws) => {
       // Parse the data as JSON
       const jsonData = JSON.parse(data);
 
-      // Add the drawing data to the history
-      drawingHistory.push(jsonData);
+      if (jsonData.action === 'reset') {
+        // Handle reset action
+        drawingHistory = [];
+        broadcastToClients(JSON.stringify(jsonData));
+      } else {
+        // Add the drawing data to the history
+        drawingHistory.push(jsonData);
 
-      // Broadcast the drawing data to all connected clients except the sender
-      clients.forEach((client) => {
-        if (client !== ws && client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify(jsonData));
-        }
-      });
+        // Broadcast the drawing data to all connected clients except the sender
+        broadcastToClientsExceptSender(ws, JSON.stringify(jsonData));
+      }
 
       // Save the drawing history to the file
       saveDrawingHistoryToFile(drawingHistory);
@@ -85,4 +87,20 @@ function saveDrawingHistoryToFile(history) {
   } catch (error) {
     console.error('Error saving drawing history to file:', error);
   }
+}
+
+function broadcastToClients(message) {
+  clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+}
+
+function broadcastToClientsExceptSender(sender, message) {
+  clients.forEach((client) => {
+    if (client !== sender && client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
 }
