@@ -1,10 +1,16 @@
 const WebSocket = require('ws');
+const fs = require('fs');
 
 // Create a new WebSocket server
 const wss = new WebSocket.Server({ port: 8080 });
 
 // Store all connected WebSocket clients
 const clients = new Set();
+// File path to store the drawing history
+const drawingHistoryFilePath = 'drawingHistory.json';
+
+// Load the drawing history from the file (if it exists)
+let drawingHistory = loadDrawingHistoryFromFile();
 
 // Handle new WebSocket connections
 wss.on('connection', (ws) => {
@@ -13,6 +19,13 @@ wss.on('connection', (ws) => {
 
   // Log client information
   console.log(`New client connected: ${ws._socket.remoteAddress}:${ws._socket.remotePort}`);
+
+  // Send the entire drawing history to the new client
+  if (drawingHistory) {
+    drawingHistory.forEach((data) => {
+      ws.send(JSON.stringify(data));
+    });
+  }
 
   // Handle incoming messages from the client
   ws.on('message', (data) => {
@@ -25,12 +38,18 @@ wss.on('connection', (ws) => {
       // Parse the data as JSON
       const jsonData = JSON.parse(data);
 
+      // Add the drawing data to the history
+      drawingHistory.push(jsonData);
+
       // Broadcast the drawing data to all connected clients except the sender
       clients.forEach((client) => {
         if (client !== ws && client.readyState === WebSocket.OPEN) {
           client.send(JSON.stringify(jsonData));
         }
       });
+
+      // Save the drawing history to the file
+      saveDrawingHistoryToFile(drawingHistory);
     } catch (error) {
       console.error('Error parsing JSON data:', error);
     }
@@ -45,3 +64,25 @@ wss.on('connection', (ws) => {
     console.log(`Client disconnected: ${ws._socket.remoteAddress}:${ws._socket.remotePort}`);
   });
 });
+
+function loadDrawingHistoryFromFile() {
+  try {
+    if (fs.existsSync(drawingHistoryFilePath)) {
+      const fileContent = fs.readFileSync(drawingHistoryFilePath, 'utf8');
+      return JSON.parse(fileContent);
+    }
+  } catch (error) {
+    console.error('Error loading drawing history from file:', error);
+  }
+
+  return [];
+}
+
+function saveDrawingHistoryToFile(history) {
+  try {
+    const jsonData = JSON.stringify(history);
+    fs.writeFileSync(drawingHistoryFilePath, jsonData, 'utf8');
+  } catch (error) {
+    console.error('Error saving drawing history to file:', error);
+  }
+}
