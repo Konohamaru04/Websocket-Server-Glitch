@@ -16,13 +16,23 @@ wss.on('connection', (ws) => {
 
   // Handle incoming messages from the client
   ws.on('message', (data) => {
-    console.log(data)
-    // Broadcast the drawing data to all connected clients
-    clients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(data);
-      }
-    });
+    if (data instanceof Buffer) {
+      // Convert Buffer data to a string
+      data = data.toString();
+    }
+
+    try {
+      // Parse the data as JSON
+      const jsonData = JSON.parse(data);
+
+      // Broadcast the drawing data to all connected clients except the sender
+      clients.forEach((client) => {
+        console.log(jsonData)
+        client.send(JSON.stringify(jsonData));
+      });
+    } catch (error) {
+      console.error('Error parsing JSON data:', error);
+    }
   });
 
   // Handle WebSocket connection close
