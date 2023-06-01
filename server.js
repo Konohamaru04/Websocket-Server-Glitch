@@ -27,8 +27,9 @@ wss.on('connection', (ws) => {
 
       // Broadcast the drawing data to all connected clients except the sender
       clients.forEach((client) => {
-        console.log(jsonData)
-        client.send(JSON.stringify(jsonData));
+        if (client !== ws && client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify(jsonData));
+        }
       });
     } catch (error) {
       console.error('Error parsing JSON data:', error);
