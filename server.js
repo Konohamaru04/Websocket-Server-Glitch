@@ -6,6 +6,7 @@ const wss = new WebSocket.Server({ port: 8080 });
 
 // Store all connected WebSocket clients
 const clients = new Set();
+
 // File path to store the drawing history
 const drawingHistoryFilePath = "drawingHistory.json";
 
@@ -21,9 +22,7 @@ wss.on("connection", (ws) => {
   clients.add(ws);
 
   // Log client information
-  console.log(
-    `New client connected: ${ws._socket.remoteAddress}:${ws._socket.remotePort}`
-  );
+  console.log(`New client connected: ${ws._socket.remoteAddress}:${ws._socket.remotePort}`);
 
   // Add the user to the connected users set
   addUserToConnectedUsers(ws);
@@ -31,13 +30,12 @@ wss.on("connection", (ws) => {
   // Send the entire drawing history to the new client
   if (drawingHistory) {
     drawingHistory.forEach((data) => {
-      ws.send(JSON.stringify(data));
+      sendMessage(ws, JSON.stringify(data));
     });
   }
 
   // Send the list of connected users to all clients
-  const userList = Array.from(connectedUsers);
-  broadcastToClients(JSON.stringify({ action: "users", users: userList }));
+  broadcastUsers();
 
   // Handle incoming messages from the client
   ws.on("message", (data) => {
@@ -53,11 +51,10 @@ wss.on("connection", (ws) => {
       if (jsonData.action === "reset") {
         // Handle reset action
         drawingHistory = [];
-        broadcastToClients(JSON.stringify(jsonData));
+        broadcastMessage(JSON.stringify(jsonData));
       } else if (jsonData.action === "getUsers") {
         // Send the list of connected users to the client
-        const userList = Array.from(connectedUsers);
-        ws.send(JSON.stringify({ action: "users", users: userList }));
+        sendUsers(ws);
       } else if (jsonData.action === "setUsername") {
         // Update the username of the user
         updateUserUsername(ws, jsonData.username);
@@ -66,7 +63,7 @@ wss.on("connection", (ws) => {
         drawingHistory.push(jsonData);
 
         // Broadcast the drawing data to all connected clients except the sender
-        broadcastToClientsExceptSender(ws, JSON.stringify(jsonData));
+        broadcastMessageExceptSender(ws, JSON.stringify(jsonData));
       }
 
       // Save the drawing history to the file
@@ -85,13 +82,10 @@ wss.on("connection", (ws) => {
     removeUserFromConnectedUsers(ws);
 
     // Log client disconnection
-    console.log(
-      `Client disconnected: ${ws._socket.remoteAddress}:${ws._socket.remotePort}`
-    );
+    console.log(`Client disconnected: ${ws._socket.remoteAddress}:${ws._socket.remotePort}`);
 
     // Broadcast the updated list of connected users to all clients
-    const userList = Array.from(connectedUsers);
-    broadcastToClients(JSON.stringify({ action: "users", users: userList }));
+    broadcastUsers();
   });
 });
 
@@ -117,20 +111,34 @@ function saveDrawingHistoryToFile(history) {
   }
 }
 
-function broadcastToClients(message) {
+function sendMessage(ws, message) {
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(message);
+  }
+}
+
+function broadcastMessage(message) {
   clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
+    sendMessage(client, message);
+  });
+}
+
+function broadcastMessageExceptSender(sender, message) {
+  clients.forEach((client) => {
+    if (client !== sender) {
+      sendMessage(client, message);
     }
   });
 }
 
-function broadcastToClientsExceptSender(sender, message) {
-  clients.forEach((client) => {
-    if (client !== sender && client.readyState === WebSocket.OPEN) {
-      client.send(message);
-    }
-  });
+function broadcastUsers() {
+  const userList = Array.from(connectedUsers);
+  broadcastMessage(JSON.stringify({ action: "users", users: userList }));
+}
+
+function sendUsers(ws) {
+  const userList = Array.from(connectedUsers);
+  sendMessage(ws, JSON.stringify({ action: "users", users: userList }));
 }
 
 function addUserToConnectedUsers(ws) {
@@ -153,8 +161,7 @@ function addUserToConnectedUsers(ws) {
   }
 
   // Broadcast the updated list of connected users to all clients
-  const userList = Array.from(connectedUsers);
-  broadcastToClients(JSON.stringify({ action: "users", users: userList }));
+  broadcastUsers();
 }
 
 function updateUserUsername(ws, username) {
@@ -166,8 +173,7 @@ function updateUserUsername(ws, username) {
   }
 
   // Broadcast the updated list of connected users to all clients
-  const userList = Array.from(connectedUsers);
-  broadcastToClients(JSON.stringify({ action: "users", users: userList }));
+  broadcastUsers();
 }
 
 function removeUserFromConnectedUsers(ws) {
@@ -179,6 +185,5 @@ function removeUserFromConnectedUsers(ws) {
   }
 
   // Broadcast the updated list of connected users to all clients
-  const userList = Array.from(connectedUsers);
-  broadcastToClients(JSON.stringify({ action: "users", users: userList }));
+  broadcastUsers();
 }
