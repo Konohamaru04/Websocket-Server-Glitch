@@ -134,12 +134,27 @@ function broadcastToClientsExceptSender(sender, message) {
 }
 
 function addUserToConnectedUsers(ws) {
-  const user = {
-    address: ws._socket.remoteAddress,
-    port: ws._socket.remotePort,
-    username: `${ws._socket.remoteAddress}:${ws._socket.remotePort}`
-  };
-  connectedUsers.add(user);
+  // Check if the user already exists in the connectedUsers set
+  const existingUser = Array.from(connectedUsers).find(
+    (u) => u.address === ws._socket.remoteAddress && u.port === ws._socket.remotePort
+  );
+
+  if (existingUser) {
+    // Update the username of the existing user
+    existingUser.username = `${ws._socket.remoteAddress}:${ws._socket.remotePort}`;
+  } else {
+    // Add the user to the connectedUsers set
+    const user = {
+      address: ws._socket.remoteAddress,
+      port: ws._socket.remotePort,
+      username: `${ws._socket.remoteAddress}:${ws._socket.remotePort}`,
+    };
+    connectedUsers.add(user);
+  }
+
+  // Broadcast the updated list of connected users to all clients
+  const userList = Array.from(connectedUsers);
+  broadcastToClients(JSON.stringify({ action: "users", users: userList }));
 }
 
 function updateUserUsername(ws, username) {
