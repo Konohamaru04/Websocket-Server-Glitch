@@ -9,6 +9,9 @@ const clients = new Set();
 // File path to store the drawing history
 const drawingHistoryFilePath = "drawingHistory.json";
 
+// Store all connected users
+const connectedUsers = new Set();
+
 // Load the drawing history from the file (if it exists)
 let drawingHistory = loadDrawingHistoryFromFile();
 
@@ -22,12 +25,19 @@ wss.on("connection", (ws) => {
     `New client connected: ${ws._socket.remoteAddress}:${ws._socket.remotePort}`
   );
 
+  // Add the user to the connected users set
+  addUserToConnectedUsers(ws);
+
   // Send the entire drawing history to the new client
   if (drawingHistory) {
     drawingHistory.forEach((data) => {
       ws.send(JSON.stringify(data));
     });
   }
+
+  // Send the list of connected users to all clients
+  const userList = Array.from(connectedUsers);
+  broadcastToClients(JSON.stringify({ action: "users", users: userList }));
 
   // Handle incoming messages from the client
   ws.on("message", (data) => {
@@ -44,6 +54,10 @@ wss.on("connection", (ws) => {
         // Handle reset action
         drawingHistory = [];
         broadcastToClients(JSON.stringify(jsonData));
+      } else if (jsonData.action === "getUsers") {
+        // Send the list of connected users to the client
+        const userList = Array.from(connectedUsers);
+        ws.send(JSON.stringify({ action: "users", users: userList }));
       } else {
         // Add the drawing data to the history
         drawingHistory.push(jsonData);
@@ -64,10 +78,17 @@ wss.on("connection", (ws) => {
     // Remove the client from the set
     clients.delete(ws);
 
+    // Remove the user from the connected users set
+    removeUserFromConnectedUsers(ws);
+
     // Log client disconnection
     console.log(
       `Client disconnected: ${ws._socket.remoteAddress}:${ws._socket.remotePort}`
     );
+
+    // Broadcast the updated list of connected users to all clients
+    const userList = Array.from(connectedUsers);
+    broadcastToClients(JSON.stringify({ action: "users", users: userList }));
   });
 });
 
@@ -107,4 +128,14 @@ function broadcastToClientsExceptSender(sender, message) {
       client.send(message);
     }
   });
+}
+
+function addUserToConnectedUsers(ws) {
+  const user = `${ws._socket.remoteAddress}:${ws._socket.remotePort}`;
+  connectedUsers.add(user);
+}
+
+function removeUserFromConnectedUsers(ws) {
+  const user = `${ws._socket.remoteAddress}:${ws._socket.remotePort}`;
+  connectedUsers.delete(user);
 }
