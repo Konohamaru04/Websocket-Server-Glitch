@@ -1,1 +1,1 @@
-[{"action":"getUsers"},{"action":"getUsers"},{"action":"draw","coordinates":[],"color":"#000000"},{"action":"draw","coordinates":[],"color":"#000000"}]
+[{"action":"getUsers"},{"action":"getUsers"},{"action":"draw","coordinates":[],"color":"#000000"},{"action":"draw","coordinates":[],"color":"#000000"},{"action":"setUsername","username":"Amartya"}]

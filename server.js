@@ -58,6 +58,9 @@ wss.on("connection", (ws) => {
         // Send the list of connected users to the client
         const userList = Array.from(connectedUsers);
         ws.send(JSON.stringify({ action: "users", users: userList }));
+      } else if (jsonData.action === "setUsername") {
+        // Update the username of the user
+        updateUserUsername(ws, jsonData.username);
       } else {
         // Add the drawing data to the history
         drawingHistory.push(jsonData);
@@ -131,11 +134,36 @@ function broadcastToClientsExceptSender(sender, message) {
 }
 
 function addUserToConnectedUsers(ws) {
-  const user = `${ws._socket.remoteAddress}:${ws._socket.remotePort}`;
+  const user = {
+    address: ws._socket.remoteAddress,
+    port: ws._socket.remotePort,
+    username: `${ws._socket.remoteAddress}:${ws._socket.remotePort}`
+  };
   connectedUsers.add(user);
 }
 
+function updateUserUsername(ws, username) {
+  const user = Array.from(connectedUsers).find(
+    (u) => u.address === ws._socket.remoteAddress && u.port === ws._socket.remotePort
+  );
+  if (user) {
+    user.username = username;
+  }
+
+  // Broadcast the updated list of connected users to all clients
+  const userList = Array.from(connectedUsers);
+  broadcastToClients(JSON.stringify({ action: "users", users: userList }));
+}
+
 function removeUserFromConnectedUsers(ws) {
-  const user = `${ws._socket.remoteAddress}:${ws._socket.remotePort}`;
-  connectedUsers.delete(user);
+  const user = Array.from(connectedUsers).find(
+    (u) => u.address === ws._socket.remoteAddress && u.port === ws._socket.remotePort
+  );
+  if (user) {
+    connectedUsers.delete(user);
+  }
+
+  // Broadcast the updated list of connected users to all clients
+  const userList = Array.from(connectedUsers);
+  broadcastToClients(JSON.stringify({ action: "users", users: userList }));
 }
