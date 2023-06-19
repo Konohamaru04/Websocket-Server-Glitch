@@ -21,6 +21,9 @@ db.run(`
 // Load the drawing history from the database (if it exists)
 let drawingHistory = [];
 
+// Store user information
+const users = {};
+
 function loadDrawingHistoryFromDatabase() {
   return new Promise((resolve, reject) => {
     db.all("SELECT * FROM drawing_history", (err, rows) => {
@@ -52,11 +55,14 @@ function saveDrawingHistoryToDatabase(history) {
 
 // Handle new WebSocket connections
 wss.on("connection", (ws) => {
+  // Assign a unique identifier to the client
+  const clientId = generateClientId();
+
   // Add the new client to the set
   clients.add(ws);
 
   // Log client information
-  console.log(`New client connected: ${ws._socket.remoteAddress}:${ws._socket.remotePort}`);
+  console.log(`New client connected: ${clientId}`);
 
   // Load the drawing history from the database
   loadDrawingHistoryFromDatabase()
@@ -73,6 +79,15 @@ wss.on("connection", (ws) => {
     .catch((error) => {
       console.error("Error loading drawing history:", error);
     });
+
+  // Create a new user and store the information
+  users[clientId] = {
+    id: clientId,
+    username: clientId,
+  };
+
+  // Send the list of connected users to the client
+  sendUsers(ws);
 
   // Handle incoming messages from the client
   ws.on("message", (data) => {
@@ -94,7 +109,8 @@ wss.on("connection", (ws) => {
         sendUsers(ws);
       } else if (jsonData.action === "setUsername") {
         // Update the username of the user
-        updateUserUsername(ws, jsonData.username);
+        updateUserUsername(clientId, jsonData.username);
+        sendUsers(ws);
       } else {
         // Add the drawing data to the history
         drawingHistory.push(jsonData);
@@ -115,8 +131,11 @@ wss.on("connection", (ws) => {
     // Remove the client from the set
     clients.delete(ws);
 
+    // Remove the user from the users object
+    delete users[clientId];
+
     // Log client disconnection
-    console.log(`Client disconnected: ${ws._socket.remoteAddress}:${ws._socket.remotePort}`);
+    console.log(`Client disconnected: ${clientId}`);
   });
 });
 
@@ -141,20 +160,19 @@ function broadcastMessageExceptSender(sender, message) {
 }
 
 function sendUsers(ws) {
-  const userList = Array.from(clients).map((client) => ({
-    address: client._socket.remoteAddress,
-    port: client._socket.remotePort,
-    username: `${client._socket.remoteAddress}:${client._socket.remotePort}`,
-  }));
+  const userList = Object.values(users);
   sendMessage(ws, JSON.stringify({ action: "users", users: userList }));
 }
 
-function updateUserUsername(ws, username) {
-  clients.forEach((client) => {
-    if (client === ws) {
-      client.username = username;
-    }
-  });
+function updateUserUsername(clientId, username) {
+  if (users[clientId]) {
+    users[clientId].username = username;
+  }
 
-  sendUsers(ws);
+  broadcastMessage(JSON.stringify({ action: "updateUsername", userId: clientId, username }));
+}
+
+// Generate a unique client identifier
+function generateClientId() {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 }
