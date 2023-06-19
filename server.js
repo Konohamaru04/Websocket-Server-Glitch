@@ -14,6 +14,7 @@ const db = new sqlite3.Database("drawingHistory.db");
 db.run(`
   CREATE TABLE IF NOT EXISTS drawing_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    userId TEXT,
     data TEXT
   )
 `);
@@ -39,18 +40,14 @@ function loadDrawingHistoryFromDatabase() {
 }
 
 // Save the drawing history to the database
-function saveDrawingHistoryToDatabase(history) {
-  const stmt = db.prepare("INSERT INTO drawing_history (data) VALUES (?)");
-
-  history.forEach((data) => {
-    stmt.run(JSON.stringify(data));
-  });
-
-  stmt.finalize((err) => {
+function saveDrawingToDatabase(userId, data) {
+  const stmt = db.prepare("INSERT INTO drawing_history (userId, data) VALUES (?, ?)");
+  stmt.run(userId, JSON.stringify(data), (err) => {
     if (err) {
-      console.error("Error saving drawing history to database:", err);
+      console.error("Error saving drawing to database:", err);
     }
   });
+  stmt.finalize();
 }
 
 // Handle new WebSocket connections
@@ -86,8 +83,8 @@ wss.on("connection", (ws) => {
     username: clientId,
   };
 
-  // Send the list of connected users to the client
-  sendUsers(ws);
+  // Send the list of connected users to all clients
+  broadcastUsers();
 
   // Handle incoming messages from the client
   ws.on("message", (data) => {
@@ -103,6 +100,7 @@ wss.on("connection", (ws) => {
       if (jsonData.action === "reset") {
         // Handle reset action
         drawingHistory = [];
+        saveDrawingHistoryToDatabase(drawingHistory);
         broadcastMessage(JSON.stringify(jsonData));
       } else if (jsonData.action === "getUsers") {
         // Send the list of connected users to the client
@@ -111,16 +109,20 @@ wss.on("connection", (ws) => {
         // Update the username of the user
         updateUserUsername(clientId, jsonData.username);
         sendUsers(ws);
-      } else {
+      } else if (jsonData.action === "draw") {
         // Add the drawing data to the history
-        drawingHistory.push(jsonData);
+        const drawingData = {
+          userId: clientId,
+          ...jsonData.data
+        };
+        drawingHistory.push(drawingData);
+
+        // Save the drawing to the database
+        saveDrawingToDatabase(clientId, drawingData);
 
         // Broadcast the drawing data to all connected clients except the sender
-        broadcastMessageExceptSender(ws, JSON.stringify(jsonData));
+        broadcastMessageExceptSender(ws, JSON.stringify(drawingData));
       }
-
-      // Save the drawing history to the database
-      saveDrawingHistoryToDatabase(drawingHistory);
     } catch (error) {
       console.error("Error parsing JSON data:", error);
     }
@@ -136,6 +138,9 @@ wss.on("connection", (ws) => {
 
     // Log client disconnection
     console.log(`Client disconnected: ${clientId}`);
+
+    // Send the updated list of connected users to all clients
+    broadcastUsers();
   });
 });
 
@@ -157,6 +162,12 @@ function broadcastMessageExceptSender(sender, message) {
       sendMessage(client, message);
     }
   });
+}
+
+function broadcastUsers() {
+  const userList = Object.values(users);
+  const userListMessage = JSON.stringify({ action: "users", users: userList });
+  broadcastMessage(userListMessage);
 }
 
 function sendUsers(ws) {
